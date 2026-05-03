@@ -1,4 +1,4 @@
-# Builder CLI
+# bob - Builder CLI
 
 A command-line tool for syncing and managing pages between your local workspace and a Frappe/ERPNext server. This tool enables real-time synchronization, local file watching, and seamless collaboration with remote server changes.
 
