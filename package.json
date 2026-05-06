@@ -1,10 +1,10 @@
 {
-  "name": "bob",
+  "name": "builder",
   "version": "0.0.1",
-  "description": "bob - A CLI tool to sync Builder pages with local files",
+  "description": "builder - A CLI tool to sync Builder pages with local files",
   "main": "dist/index.js",
   "bin": {
-    "bob": "./dist/index.js"
+    "builder": "./dist/index.js"
   },
   "scripts": {
     "dev": "tsx src/index.ts",

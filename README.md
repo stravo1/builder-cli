@@ -1,4 +1,4 @@
-# bob - Builder CLI
+# builder - Builder CLI
 
 A command-line tool for syncing and managing frappe/builder pages between your local workspace and a Frappe server. This tool enables real-time synchronization, local file watching, and seamless collaboration with remote server changes.
 
@@ -12,8 +12,8 @@ A command-line tool for syncing and managing frappe/builder pages between your l
 ## Installation
 
 ```bash
-git clone https://github.com/stravo1/bob
-cd bob
+git clone https://github.com/stravo1/builder
+cd builder
 npm install
 npm run build
 # optionally link for development
@@ -40,7 +40,7 @@ The tool uses a `config.json` file to store connection settings:
 Set up a new local workspace by connecting to your Frappe server and syncing all pages.
 
 ```bash
-bob init --site-name <name> --site-url <url> --token <token> [options]
+builder init --site-name <name> --site-url <url> --token <token> [options]
 ```
 
 **Options:**
@@ -53,7 +53,7 @@ bob init --site-name <name> --site-url <url> --token <token> [options]
 
 **Example:**
 ```bash
-bob init --site-name "sample.m.frappe.cloud" --site-url "https://sample.m.frappe.cloud" --token "key:secret"
+builder init --site-name "sample.m.frappe.cloud" --site-url "https://sample.m.frappe.cloud" --token "key:secret"
 ```
 
 ### `watch` - Sync Changes in Real-time
@@ -61,7 +61,7 @@ bob init --site-name "sample.m.frappe.cloud" --site-url "https://sample.m.frappe
 Monitor local files and server changes, syncing updates bidirectionally in real-time.
 
 ```bash
-bob watch
+builder watch
 ```
 
 This command:
@@ -75,7 +75,7 @@ This command:
 Manually pull the latest pages and data from the server.
 
 ```bash
-bob pull
+builder pull
 ```
 
 This will:
@@ -88,7 +88,7 @@ This will:
 Push your local changes to the remote server.
 
 ```bash
-bob push
+builder push
 ```
 
 ## Usage Examples
@@ -98,7 +98,7 @@ bob push
 1. **Initialize a new workspace:**
    ```bash
    cd my-workspace
-   bob init \
+   builder init \
      --site-name "sample.m.frappe.cloud" \
      --site-url "https://sample.m.frappe.cloud" \
      --token "key:secret"
@@ -106,20 +106,20 @@ bob push
 
 2. **Start watching for changes:**
    ```bash
-   bob watch
+   builder watch
    ```
 
 3. **Make changes locally** in the `pages/` directory, and they'll automatically sync to the server.
 
 4. **Manually pull updates:**
    ```bash
-   bob pull
+   builder pull
    ```
 
 ## Project Structure
 
 ```
-bob/
+builder/
 ├── src/
 │   ├── commands/          # CLI command implementations
 │   │   ├── init.ts       # Initialize workspace
