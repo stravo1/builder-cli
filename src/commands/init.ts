@@ -1,9 +1,10 @@
 import { Command } from "commander";
 import { confirm } from "@inquirer/prompts";
 import FrappeClient from "../lib/frappeClient";
-import { readFile, writeFile, } from "../utils/file";
+import { readFile, writeFile } from "../utils/file";
 import { logger } from "../utils/logger";
 import { pull } from "./pull";
+import { generateGitIgnore } from "../lib/generateGitIgnore";
 
 const CONFIG_FILE = "config.json";
 
@@ -35,9 +36,7 @@ export const initCommand = new Command("init")
         const site_url = options.siteUrl.replace(/\/$/, "");
 
         try {
-            const existingConfig = JSON.parse(
-                readFile(CONFIG_FILE) || "{}",
-            );
+            const existingConfig = JSON.parse(readFile(CONFIG_FILE) || "{}");
 
             logger.info("Existing configuration:");
             displayConfig(existingConfig);
@@ -71,16 +70,15 @@ export const initCommand = new Command("init")
         }
 
         writeFile(CONFIG_FILE, JSON.stringify(newConfig, null, 2));
+        generateGitIgnore();
 
         logger.info("New configuration:");
         displayConfig(newConfig);
 
         const client = new FrappeClient(site_url, options.token);
         const connectionSuccessful = await client.testConnection();
-        if (connectionSuccessful) {
-            console.log("Connection successful!");
-        } else {
-            console.error(
+        if (!connectionSuccessful) {
+            logger.error(
                 "Failed to connect to the site. Please check your URL and authentication token.",
             );
             return;

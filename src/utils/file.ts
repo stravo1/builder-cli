@@ -30,7 +30,6 @@ const appendFile = (filePath: string, content: string) => {
 const readDir = (dirPath: string): string[] => {
     try {
         const files = readdirSync(dirPath);
-        // console.log(`Directory read successfully: ${dirPath}`);
         return files;
     } catch (error) {
         logger.error(`Error reading directory ${dirPath}:`, error);
@@ -41,7 +40,6 @@ const readDir = (dirPath: string): string[] => {
 const makeDir = (dirPath: string) => {
     try {
         mkdirSync(dirPath, { recursive: true });
-        // console.log(`Directory created successfully: ${dirPath}`);
     } catch (error) {
         logger.error(`Error creating directory ${dirPath}:`, error);
     }
@@ -50,7 +48,6 @@ const makeDir = (dirPath: string) => {
 const deleteDir = (dirPath: string) => {
     try {
         rmSync(dirPath, { recursive: true, force: true });
-        // console.log(`Directory deleted successfully: ${dirPath}`);
     } catch (error) {
         logger.error(`Error deleting directory ${dirPath}:`, error);
     }
@@ -59,7 +56,6 @@ const deleteDir = (dirPath: string) => {
 const readFile = (filePath: string): string | null => {
     try {
         const content = readFileSync(filePath, "utf-8");
-        // console.log(`File read successfully: ${filePath}`);
         return content;
     } catch (error) {
         logger.error(`Error reading file ${filePath}:`, error);
@@ -78,7 +74,6 @@ const writeFile = (filePath: string, content: string, mtime?: string) => {
                 logger.error(`Error setting modification time for file ${filePath}:`, error);
             }
         }
-        // console.log(`File written successfully: ${filePath}`);
     } catch (error) {
         logger.error(`Error writing file ${filePath}:`, error);
     }

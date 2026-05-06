@@ -64,8 +64,8 @@ const watchLocalChanges = (client: FrappeClient) => {
                 const fileMtime = getFileStats(p)?.mtime.getTime() || 0;
                 const storedMtime = readFile(`${pageDir}/.last_modified`);
                 if (!storedMtime) {
-                    console.warn(
-                        `No stored modification time found for ${pageDir}. This might be a new page or the .last_modified file is missing. Skipping update.`,
+                    logger.info(
+                        `No .last_modified file found for ${pageDir}. Skipping update.`,
                     );
                     return;
                 }
@@ -73,7 +73,7 @@ const watchLocalChanges = (client: FrappeClient) => {
                 const serverMtime = new Date(storedMtime.trim()).getTime();
 
                 if (fileMtime <= serverMtime) {
-                    console.log(
+                    logger.info(
                         `No local changes detected for ${pageDir} since last sync. Skipping update to server.`,
                     );
                     return;
@@ -99,9 +99,9 @@ const watchLocalChanges = (client: FrappeClient) => {
 
                     await client.updatePage(pageName, updateMap, storedMtime);
 
-                    console.log(`Updated page: ${pageName} successfully!`);
+                    logger.info(`Updated page: ${pageName} successfully!`);
                 } else {
-                    console.error(
+                    logger.error(
                         `No page name found in page.json of ${pageDir}`,
                     );
                 }
@@ -117,7 +117,7 @@ const watchRemoteChanges = (config: any, client: FrappeClient) => {
         urlObject.port = config.socketioPort;
     }
     url = `${urlObject.toString()}${config.siteName}`;
-    console.log(`Connecting to Socket.IO server at ${url}...`);
+    logger.info(`Connecting to Socket.IO server at ${url}...`);
 
     const socket = io(url, {
         withCredentials: true,
@@ -128,8 +128,7 @@ const watchRemoteChanges = (config: any, client: FrappeClient) => {
         },
     });
     socket.on("connect", () => {
-        log(
-            "response",
+        logger.info(
             `[CONNECTED] Socket ID: ${c.bold}${socket.id}${c.reset}`,
         );
         global.socketId = socket.id!;
@@ -137,19 +136,19 @@ const watchRemoteChanges = (config: any, client: FrappeClient) => {
     });
 
     socket.on("disconnect", (reason) => {
-        log("error", `[DISCONNECTED] ${reason}`);
+        logger.error(`[DISCONNECTED] ${reason}`);
     });
 
     socket.on("connect_error", (err) => {
-        log("error", `[CONNECTION ERROR] ${err.message}`);
+        logger.error(`[CONNECTION ERROR] ${err.message}`);
     });
 
     socket.on("error", (err) => {
-        log("error", `[SOCKET ERROR] ${err}`);
+        logger.error(`[SOCKET ERROR] ${err}`);
     });
 
     socket.on("list_update", (page) => {
-        log("response", `[PAGE UPDATE] ${c.bold}${page.name}${c.reset}`);
+        logger.info(`[PAGE UPDATE] ${c.bold}${page.name}${c.reset}`);
         writePage(client, page);
     });
 };
@@ -161,11 +160,11 @@ export const watchCommand = new Command("watch")
     .option("--only-local", "Watch only local file changes and sync to server")
     .option("--only-remote", "Watch only remote changes and sync to local")
     .action(async (options) => {
-        console.log("Watching for changes...");
+        logger.info("Starting watch mode...");
         const config = readFile(CONFIG_FILE);
         if (!config) {
-            console.error(
-                "Configuration file not found. Please run 'init' command first.",
+            logger.error(
+                "No configuration found. Please run the init command first.",
             );
             return;
         }
@@ -176,15 +175,14 @@ export const watchCommand = new Command("watch")
         const client = new FrappeClient(siteUrl, authToken);
         client.testConnection().then((isConnected) => {
             if (!isConnected) {
-                console.error(
+                logger.error(
                     "Failed to connect to the site. Please check your configuration and try again.",
                 );
                 return;
             }
-            log("response", `${c.green}✓ Connection successful${c.reset}`);
+            logger.info("Connection to site successful. Initializing watchers...");
         });
         if (!options.onlyLocal) {
-            console.log("Setting up remote watcher...");
             await pull(client);
             watchRemoteChanges(
                 { siteUrl, authToken, socketioPort, siteName },

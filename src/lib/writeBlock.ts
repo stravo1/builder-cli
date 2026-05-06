@@ -1,4 +1,11 @@
-import { deleteDir, makeDir, readDir, writeFile, fileExists, getFileStats } from "../utils/file";
+import {
+    deleteDir,
+    makeDir,
+    readDir,
+    writeFile,
+    fileExists,
+    getFileStats,
+} from "../utils/file";
 import { safeFileName } from "../utils/misc";
 
 const writeBlock = async (
@@ -34,7 +41,7 @@ const writeBlock = async (
     }
     // delete blockDirs which are not present in the children list
     // get list of blockDirs in the output directory
-    if ((block.children as Record<string, unknown>[] || []).length > 0) {
+    if (((block.children as Record<string, unknown>[]) || []).length > 0) {
         const path = await import("path");
         const blockDirs = readDir(dirName);
         for (const blockDir of blockDirs) {
@@ -43,8 +50,9 @@ const writeBlock = async (
             if (
                 !children.some(
                     (child: any) =>
-                        safeFileName(`${child.blockName || child.element || "unnamed"}_${child.blockId}`) ===
-                        blockDir,
+                        safeFileName(
+                            `${child.blockName || child.element || "unnamed"}_${child.blockId}`,
+                        ) === blockDir,
                 ) &&
                 getFileStats(fullPath)?.isDirectory()
             ) {
@@ -67,6 +75,7 @@ const writeBlock = async (
 
     const blockDataPath = `${dirName}/block.json`;
     writeFile(blockDataPath, JSON.stringify(block, null, 2), serverMtime);
+    return dirName;
 };
 
 export default writeBlock;

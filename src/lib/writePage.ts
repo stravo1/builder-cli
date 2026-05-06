@@ -2,13 +2,14 @@ import { makeDir, writeFile, fileExists } from "../utils/file";
 import FrappeClient from "./frappeClient";
 import writeBlock from "./writeBlock";
 import { safeFileName } from "../utils/misc";
+import { logger } from "../utils/logger";
 
 const writePage = async (
     client: FrappeClient,
     page: any,
     outputDir: string = "pages",
 ) => {
-    console.log(`Writing page: ${page.name}`);
+    logger.info(`Writing page: ${page.name}`);
     const pageDetails = await client.getPage(page.name);
     if (pageDetails) {
         if (
@@ -16,18 +17,18 @@ const writePage = async (
             pageDetails.modified === global.lastSyncTimestamp &&
             pageDetails.custom_last_sync_client === global.socketId
         ) {
-            console.log(
+            logger.info(
                 `No changes detected for page: ${page.name}. Skipping write.`,
             );
             return;
         }
         // Write page details to a file in the output directory
-        // console.log(`Page details for ${page.name}:`, pageDetails);
-        const dirName = safeFileName(`${pageDetails.page_title}_${pageDetails.name}`);
+        const dirName = safeFileName(
+            `${pageDetails.page_title}_${pageDetails.name}`,
+        );
 
         const pwd = process.cwd();
         const pageDir = `${pwd}/${outputDir}/${dirName}`;
-
 
         // check if pageDir already exists, create if not
         if (!fileExists(pageDir)) {
@@ -43,7 +44,11 @@ const writePage = async (
         delete pageDetails.draft_blocks;
         delete pageDetails.blocks;
 
-        writeFile(`${pageDir}/page.json`, JSON.stringify(pageDetails, null, 2), pageDetails.modified);
+        writeFile(
+            `${pageDir}/page.json`,
+            JSON.stringify(pageDetails, null, 2),
+            pageDetails.modified,
+        );
 
         if (pageDetails.page_data_script) {
             writeFile(
@@ -53,10 +58,18 @@ const writePage = async (
             );
         }
         if (pageDetails.head_html) {
-            writeFile(`${pageDir}/head.html`, pageDetails.head_html, pageDetails.modified);
+            writeFile(
+                `${pageDir}/head.html`,
+                pageDetails.head_html,
+                pageDetails.modified,
+            );
         }
         if (pageDetails.body_html) {
-            writeFile(`${pageDir}/body.html`, pageDetails.body_html, pageDetails.modified);
+            writeFile(
+                `${pageDir}/body.html`,
+                pageDetails.body_html,
+                pageDetails.modified,
+            );
         }
         // write page last modified timestamp to a file
         writeFile(
@@ -64,8 +77,10 @@ const writePage = async (
             pageDetails.modified,
             pageDetails.modified,
         );
+        return dirName;
     } else {
-        console.error(`Failed to fetch details for page: ${page.name}`);
+        logger.error(`Failed to fetch details for page: ${page.name}`);
+        return null;
     }
 };
 
