@@ -35,15 +35,13 @@ export const initCommand = new Command("init")
         // remove trailing slashes from the end of the site_url if present
         const site_url = options.siteUrl.replace(/\/$/, "");
 
-        try {
-            const existingConfig = JSON.parse(readFile(CONFIG_FILE) || "{}");
-
-            logger.info("Existing configuration:");
-            displayConfig(existingConfig);
-
+        const existingConfig = JSON.parse(readFile(CONFIG_FILE)!);
+        if (existingConfig) {
             let overwrite = false;
             if (!Boolean(options.force)) {
                 if (!Boolean(options.onlyCli)) {
+                    logger.info("Existing configuration:");
+                    displayConfig(existingConfig);
                     overwrite = await confirm({
                         message:
                             "A configuration file already exists. Do you want to overwrite it?",
@@ -56,8 +54,6 @@ export const initCommand = new Command("init")
                 logger.info("Initialization cancelled.");
                 return;
             }
-        } catch {
-            // No existing config file, proceed with initialization
         }
         const newConfig: Record<string, any> = {
             siteUrl: site_url,

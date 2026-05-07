@@ -12,16 +12,6 @@ const writePage = async (
     logger.info(`Writing page: ${page.name}`);
     const pageDetails = await client.getPage(page.name);
     if (pageDetails) {
-        if (
-            global.lastSyncTimestamp !== "" &&
-            pageDetails.modified === global.lastSyncTimestamp &&
-            pageDetails.custom_last_sync_client === global.socketId
-        ) {
-            logger.info(
-                `No changes detected for page: ${page.name}. Skipping write.`,
-            );
-            return;
-        }
         // Write page details to a file in the output directory
         const dirName = safeFileName(
             `${pageDetails.page_title}_${pageDetails.name}`,

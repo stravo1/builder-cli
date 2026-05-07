@@ -130,7 +130,8 @@ class FrappeClient {
                 url = `${this.siteUrl}/api/method/builder.api.save_from_cli`;
                 method = "POST";
                 body = {
-                    page_name: pageName,
+                    doctype: "Builder Page",
+                    name: pageName,
                     update_map: updateMap,
                     last_known_server_mtime: lastModified,
                 };
@@ -158,6 +159,115 @@ class FrappeClient {
             return (await response.json()).data;
         } catch (error) {
             logger.error("Error occurred while updating page:", error);
+            return null;
+        }
+    }
+
+    async getComponents(): Promise<any> {
+        try {
+            const response = await fetch(
+                encodeURI(`${this.siteUrl}/api/resource/Builder Component`),
+                {
+                    headers: {
+                        Authorization: `token ${this.authToken}`,
+                    },
+                },
+            );
+            if (!response.ok) {
+                logger.error(
+                    `${response.status} ${response.statusText || "Unknown error occurred while fetching components"}`,
+                );
+                return [];
+            }
+            return (await response.json()).data;
+        } catch (error) {
+            logger.error("Error occurred while fetching components:", error);
+            return [];
+        }
+    }
+
+    async getComponent(
+        componentName: string,
+        fields: string[] = [],
+    ): Promise<any> {
+        try {
+            const response = await fetch(
+                encodeURI(
+                    `${this.siteUrl}/api/resource/Builder Component/${componentName}`,
+                ),
+                {
+                    headers: {
+                        Authorization: `token ${this.authToken}`,
+                    },
+                },
+            );
+            if (!response.ok) {
+                logger.error(
+                    `${response.status} ${response.statusText || "Unknown error occurred while fetching component"}`,
+                );
+                return null;
+            }
+            if (fields.length > 0) {
+                const componentData = (await response.json()).data;
+                const filteredData: any = {};
+                fields.forEach((field) => {
+                    filteredData[field] = componentData[field];
+                });
+                return filteredData;
+            }
+            return (await response.json()).data;
+        } catch (error) {
+            logger.error("Error occurred while fetching component:", error);
+            return null;
+        }
+    }
+
+    async updateComponent(
+        componentName: string,
+        updateMap: Record<string, unknown>,
+        lastModified?: string,
+    ): Promise<any> {
+        try {
+            let url = `${this.siteUrl}/api/resource/Builder Component/${componentName}`;
+            let body = {};
+            let method = "PUT";
+
+            if (this.hasCliSaveEndpoint) {
+                url = `${this.siteUrl}/api/method/builder.api.save_from_cli`;
+                method = "POST";
+                body = {
+                    doctype: "Builder Component",
+                    name: componentName,
+                    update_map: updateMap,
+                    last_known_server_mtime: lastModified,
+                };
+            } else {
+                logger.warn(
+                    "CLI save endpoint not available. Falling back to standard resource update. This may cause conflicts if the component was modified on the server since last fetch.",
+                );
+                body = updateMap;
+            }
+            const response = await fetch(encodeURI(url), {
+                method,
+                headers: {
+                    "Content-Type": "application/json",
+                    Authorization: `token ${this.authToken}`,
+                },
+                body: JSON.stringify(body),
+            });
+            if (!response.ok) {
+                logger.debug(JSON.stringify(response));
+                logger.error(
+                    `${response.status} ${
+                        response.statusText ||
+                        "Unknown error occurred while updating component"
+                    }`,
+                );
+                return null;
+            }
+            return (await response.json()).data;
+        } catch (error) {
+            logger.error("Error occurred while updating component:", error);
             return null;
         }
     }

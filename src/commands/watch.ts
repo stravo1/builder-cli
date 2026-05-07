@@ -4,16 +4,23 @@ import { readFile } from "../utils/file";
 import { logger, c } from "../utils/logger";
 import chokidar from "chokidar";
 import FrappeClient from "../utils/frappeClient";
-import path from "path";
+import path from "node:path";
 import { pull } from "./pull";
 import { PushQueue } from "../queues/PushQueue";
 import { PullQueue } from "../queues/PullQueue";
 
 const CONFIG_FILE = "config.json";
 
-const watchLocalChanges = (client: FrappeClient) => {
+const watchLocalChanges = (client: FrappeClient, debounceDelay: number) => {
     const WATCH_PATHS = ["pages", "components", "globals"];
-    const pushQueue = new PushQueue(client, 1000); // 1s debounce delay
+
+    const pushQueueForPages = new PushQueue(client, "Page", debounceDelay);
+    const pushQueueForComponents = new PushQueue(
+        client,
+        "Component",
+        debounceDelay,
+    );
+    const pushQueueForGlobal = new PushQueue(client, "Global", debounceDelay);
 
     const watcher = chokidar.watch(WATCH_PATHS, {
         persistent: true,
@@ -49,27 +56,58 @@ const watchLocalChanges = (client: FrappeClient) => {
 
             const pwd = process.cwd();
             const isChangeInPages = p.startsWith("pages/");
-            if (!isChangeInPages) {
+            const isChangeInComponents = p.startsWith("components/");
+            const isChangeInGlobals = p.startsWith("globals/");
+
+            // Only process changes to files within the pages directory
+            if (isChangeInPages) {
                 logger.info(
-                    `Change detected in ${p}, but it's outside the pages directory. Ignoring.`,
+                    `Page: Change detected in ${p}.`,
                 );
+                const pageDir = path.resolve(
+                    `${pwd}/${p.match(/^(pages\/[^\/]+\/)/)![0]}`,
+                );
+
+                if (pageDir) {
+                    console.log(`Queuing page for push: ${pageDir}`, p);
+                    pushQueueForPages.add(pageDir, p);
+                }
                 return;
             }
 
-            const pageDir = path.resolve(
-                `${pwd}/${p.match(/^(pages\/[^\/]+\/)/)![0]}`,
-            );
+            if (isChangeInComponents) {
+                logger.info(
+                    `Component: Change detected in ${p}.`,
+                );
+                const componentDir = path.resolve(
+                    `${pwd}/${p.match(/^(components\/[^\/]+\/)/)![0]}`,
+                );
 
-            if (pageDir) {
-                // Queue only pageDir; processor handles all logic
-                pushQueue.add(pageDir);
+                if (componentDir) {
+                    console.log(
+                        `Queuing component for push: ${componentDir}`,
+                        p,
+                    );
+                    pushQueueForComponents.add(componentDir, p);
+                }
+                return;
             }
         });
 };
 
-const watchRemoteChanges = (config: any, client: FrappeClient) => {
-    const pullQueue = new PullQueue(client, 1000); // 1s debounce delay
-    
+const watchRemoteChanges = (
+    config: any,
+    client: FrappeClient,
+    debounceDelay: number,
+) => {
+    const pullQueueForPages = new PullQueue(client, "Page", debounceDelay);
+    const pullQueueForComponents = new PullQueue(
+        client,
+        "Component",
+        debounceDelay,
+    );
+    const pullQueueForGlobals = new PullQueue(client, "Global", debounceDelay);
+
     let url;
     let urlObject = new URL(config.siteUrl);
     let secure = urlObject.protocol === "https:";
@@ -88,11 +126,10 @@ const watchRemoteChanges = (config: any, client: FrappeClient) => {
         },
     });
     socket.on("connect", () => {
-        logger.info(
-            `[CONNECTED] Socket ID: ${c.bold}${socket.id}${c.reset}`,
-        );
+        logger.info(`[CONNECTED] Socket ID: ${c.bold}${socket.id}${c.reset}`);
         global.socketId = socket.id!;
         socket?.emit("doctype_subscribe", "Builder Page");
+        socket?.emit("doctype_subscribe", "Builder Component");
     });
 
     socket.on("disconnect", (reason) => {
@@ -107,15 +144,29 @@ const watchRemoteChanges = (config: any, client: FrappeClient) => {
         logger.error(`[SOCKET ERROR] ${err}`);
     });
 
-    socket.on("list_update", (page) => {
-        logger.info(`[PAGE UPDATE] ${c.bold}${page.name}${c.reset}`);
-        pullQueue.add(page);
+    socket.on("list_update", (document) => {
+        console.log("Received list_update for document:", document);
+        logger.info(`[LIST UPDATE] ${c.bold}${document.name}${c.reset}`);
+        if (document.doctype === "Builder Page") {
+            pullQueueForPages.add(document);
+        } else if (document.doctype === "Builder Component") {
+            pullQueueForComponents.add(document);
+        } else {
+            logger.warn(
+                `Received list_update for unhandled doctype: ${document.doctype}`,
+            );
+        }
     });
 };
 
 export const watchCommand = new Command("watch")
     .description(
         "Watch for local and server changes, sync updates in real time, and manage Git merges automatically.",
+    )
+    .option(
+        "--debounce <ms>",
+        "Debounce delay in milliseconds for processing changes",
+        "100",
     )
     .option("--only-local", "Watch only local file changes and sync to server")
     .option("--only-remote", "Watch only remote changes and sync to local")
@@ -140,16 +191,20 @@ export const watchCommand = new Command("watch")
                 );
                 return;
             }
-            logger.info("Connection to site successful. Initializing watchers...");
+            logger.info(
+                "Connection to site successful. Initializing watchers...",
+            );
         });
         if (!options.onlyLocal) {
+            // sync remote changes to local before starting to watch for changes
             await pull(client);
             watchRemoteChanges(
                 { siteUrl, authToken, socketioPort, siteName },
                 client,
+                parseInt(options.debounce),
             );
         }
         if (!options.onlyRemote) {
-            watchLocalChanges(client);
+            watchLocalChanges(client, parseInt(options.debounce));
         }
     });
