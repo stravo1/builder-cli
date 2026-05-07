@@ -1,18 +1,12 @@
-# builder - Builder CLI
+# builder-cli
 
-A command-line tool for syncing and managing frappe/builder pages between your local workspace and a Frappe server. This tool enables real-time synchronization, local file watching, and seamless collaboration with remote server changes.
+A command-line tool for syncing and managing [frappe/builder](https://github.com/frappe/builder) pages between your local workspace and a Frappe server. This tool enables **real-time, bi-directional synchronization**.
 
-## Features
-
-- **Real-time Synchronization**: Watch local and remote changes simultaneously
-- **Two-way Sync**: Push local updates to the server and pull remote changes locally
-- **Socket.IO Integration**: Instant notifications of server-side updates
-- **Quick Reloading**: Monitor file changes and automatically sync updates
 
 ## Installation
 
 ```bash
-git clone https://github.com/stravo1/builder
+git clone https://github.com/stravo1/builder-cli
 cd builder
 npm install
 npm run build
@@ -119,25 +113,32 @@ builder push
 ## Project Structure
 
 ```
-builder/
+builder-cli/
 ├── src/
-│   ├── commands/          # CLI command implementations
-│   │   ├── init.ts       # Initialize workspace
-│   │   ├── watch.ts      # Watch and sync changes
-│   │   ├── pull.ts       # Pull pages from server
-│   │   └── push.ts       # Push changes to server
-│   ├── lib/              # Core library functions
-│   │   ├── buildPage.ts  # Page building logic
-│   │   ├── frappeClient.ts # Server API client
-│   │   ├── writePage.ts  # Write page to local filesystem
-│   │   └── writeBlock.ts # Block file writing
-│   ├── utils/            # Utility functions
-│   │   ├── file.ts       # File system operations
-│   │   └── logger.ts     # Logging utilities
-│   ├── global.d.ts       # Global type definitions
-│   └── index.ts          # CLI entry point
-├── package.json          # Dependencies and scripts
-└── tsconfig.json         # TypeScript configuration
+│   ├── commands/             # CLI command implementations
+│   │   ├── init.ts           # Initialize workspace
+│   │   ├── pull.ts           # Pull pages from server
+│   │   ├── push.ts           # Push changes to server
+│   │   └── watch.ts          # Watch and sync changes
+│   ├── queues/               # Queue management for async operations
+│   │   ├── PullQueue.ts      # Queue for pull operations
+│   │   └── PushQueue.ts      # Queue for push operations
+│   ├── services/             # Core business logic services
+│   │   ├── buildPage.ts      # Page building logic
+│   │   ├── generateGitIgnore.ts # Generate .gitignore files
+│   │   ├── writeBlock.ts     # Write block files to filesystem
+│   │   └── writePage.ts      # Write page files to filesystem
+│   ├── utils/                # Utility functions
+│   │   ├── file.ts           # File system operations
+│   │   ├── frappeClient.ts   # Frappe Server API client
+│   │   ├── logger.ts         # Logging utilities
+│   │   └── misc.ts           # Miscellaneous helpers
+│   ├── global.d.ts           # Global type definitions
+│   └── index.ts              # CLI entry point
+├── package.json              # Dependencies and scripts
+├── tsconfig.json             # TypeScript configuration
+├── README.md                 # Project documentation
+└── LICENSE                   # License file
 ```
 
 ## Page Structure
