@@ -1,77 +1,42 @@
-import { makeDir, writeFile, fileExists } from "../utils/file";
 import FrappeClient from "../utils/frappeClient";
-import writeBlock from "./writeBlock";
-import { safeFileName } from "../utils/misc";
-import { logger } from "../utils/logger";
+import { WriteHandler, genericWrite } from "./writeHandler";
+
+const pageHandler: WriteHandler = {
+    fetch: (client, name) => client.getPage(name),
+    getDirName: (details) => `${details.page_title}_${details.name}`,
+    getJsonFileName: () => "page.json",
+    getOptionalFiles: (details, itemDir) => {
+        const files: Array<{ path: string; content: string }> = [];
+
+        if (details.page_data_script) {
+            files.push({
+                path: `${itemDir}/data_script.py`,
+                content: details.page_data_script,
+            });
+        }
+        if (details.head_html) {
+            files.push({
+                path: `${itemDir}/head.html`,
+                content: details.head_html,
+            });
+        }
+        if (details.body_html) {
+            files.push({
+                path: `${itemDir}/body.html`,
+                content: details.body_html,
+            });
+        }
+        return files;
+    },
+    typeLabel: "page",
+};
 
 const writePage = async (
     client: FrappeClient,
     page: any,
     outputDir: string = "pages",
 ) => {
-    logger.info(`Writing page: ${page.name}`);
-    const pageDetails = await client.getPage(page.name);
-    if (pageDetails) {
-        // Write page details to a file in the output directory
-        const dirName = safeFileName(
-            `${pageDetails.page_title}_${pageDetails.name}`,
-        );
-
-        const pwd = process.cwd();
-        const pageDir = `${pwd}/${outputDir}/${dirName}`;
-
-        // check if pageDir already exists, create if not
-        if (!fileExists(pageDir)) {
-            makeDir(pageDir);
-        }
-
-        const draftBlocks = pageDetails.draft_blocks;
-        const blocks = JSON.parse(draftBlocks || pageDetails.blocks || "[]");
-        for (const block of blocks) {
-            await writeBlock(block, `${pageDir}/blocks`, pageDetails.modified);
-        }
-
-        delete pageDetails.draft_blocks;
-        delete pageDetails.blocks;
-
-        writeFile(
-            `${pageDir}/page.json`,
-            JSON.stringify(pageDetails, null, 2),
-            pageDetails.modified,
-        );
-
-        if (pageDetails.page_data_script) {
-            writeFile(
-                `${pageDir}/data_script.py`,
-                pageDetails.page_data_script,
-                pageDetails.modified,
-            );
-        }
-        if (pageDetails.head_html) {
-            writeFile(
-                `${pageDir}/head.html`,
-                pageDetails.head_html,
-                pageDetails.modified,
-            );
-        }
-        if (pageDetails.body_html) {
-            writeFile(
-                `${pageDir}/body.html`,
-                pageDetails.body_html,
-                pageDetails.modified,
-            );
-        }
-        // write page last modified timestamp to a file
-        writeFile(
-            `${pageDir}/.last_modified`,
-            pageDetails.modified,
-            pageDetails.modified,
-        );
-        return dirName;
-    } else {
-        logger.error(`Failed to fetch details for page: ${page.name}`);
-        return null;
-    }
+    return genericWrite(client, page, pageHandler, outputDir);
 };
 
 export default writePage;

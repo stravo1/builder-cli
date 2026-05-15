@@ -3,45 +3,68 @@ import FrappeClient from "../utils/frappeClient";
 import buildPage from "../services/buildPage";
 import { readFile, getFileStats } from "../utils/file";
 import buildComponent from "../services/buildComponent";
+import { BaseQueue } from "./BaseQueue";
 
-export class PushQueue {
-    private queue: Map<string, string> = new Map(); // [type]Dir -> fileDir
-    private type: "Page" | "Component" | "Global";
-    private processing = false;
-    private debounceTimer: NodeJS.Timeout | null = null;
-    private readonly debounceDelay: number;
-    private readonly client: FrappeClient;
+type PushHandler = {
+    builder: (dir: string) => Promise<any>;
+    buildUpdateMap: (builtData: any) => Record<string, unknown>;
+    update: (name: string, updateMap: Record<string, unknown>, mtime: string) => Promise<void>;
+    getNameKey: (builtData: any) => string;
+    nameFieldPath: string;
+};
+
+export class PushQueue extends BaseQueue {
+    private handlers: Record<string, PushHandler> = {
+        Page: {
+            builder: buildPage,
+            buildUpdateMap: (data) => {
+                const updateMap: Record<string, unknown> = {};
+                if (data.headHtml !== null) {
+                    updateMap.head_html = data.headHtml;
+                }
+                if (data.bodyHtml !== null) {
+                    updateMap.body_html = data.bodyHtml;
+                }
+                if (data.dataScript !== null) {
+                    updateMap.page_data_script = data.dataScript;
+                }
+                if (data.blocks?.length > 0) {
+                    updateMap.draft_blocks = JSON.stringify(data.blocks);
+                }
+                updateMap.custom_last_sync_client = global.socketId;
+                return updateMap;
+            },
+            update: (name, updateMap, mtime) => this.client.updatePage(name, updateMap, mtime),
+            getNameKey: (data) => data.pageData.name,
+            nameFieldPath: "pageData.name",
+        },
+        Component: {
+            builder: buildComponent,
+            buildUpdateMap: (data) => ({
+                block: JSON.stringify(data.block),
+            }),
+            update: (name, updateMap, mtime) => this.client.updateComponent(name, updateMap, mtime),
+            getNameKey: (data) => data.componentData.name,
+            nameFieldPath: "componentData.name",
+        },
+    };
 
     constructor(
         client: FrappeClient,
         type: "Page" | "Component" | "Global",
         debounceDelay: number = 1000,
     ) {
-        this.client = client;
-        this.type = type;
-        this.debounceDelay = debounceDelay;
+        super(client, type, debounceDelay);
     }
 
     add(mainDir: string, fileDir: string) {
-        // Remove existing entry for this pageDir, then add new one
+        // Remove existing entry for this mainDir, then add new one
         this.queue.delete(mainDir);
         this.queue.set(mainDir, fileDir);
         this.scheduleProcessing();
     }
 
-    private scheduleProcessing() {
-        // Clear existing debounce timer
-        if (this.debounceTimer) {
-            clearTimeout(this.debounceTimer);
-        }
-
-        // Set new debounce timer
-        this.debounceTimer = setTimeout(() => {
-            this.process();
-        }, this.debounceDelay);
-    }
-
-    private async process() {
+    protected async process() {
         if (this.processing || this.queue.size === 0) {
             return;
         }
@@ -53,20 +76,17 @@ export class PushQueue {
                 `Processing ${this.queue.size} queued update${this.queue.size > 1 ? "s" : ""}...`,
             );
 
+            const handler = this.handlers[this.type];
+            if (!handler) {
+                logger.warn(`Unknown type ${this.type} for PushQueue.`);
+                this.queue.clear();
+                return;
+            }
+
             // Process all items in parallel
             const promises = Array.from(this.queue.entries()).map(
-                ([mainDir, fileDir]) => {
-                    if (this.type === "Page") {
-                        return this.processPage(mainDir, fileDir);
-                    } else if (this.type === "Component") {
-                        return this.processComponent(mainDir, fileDir);
-                    } else {
-                        logger.warn(
-                            `Unknown type ${this.type} for PushQueue. Skipping processing for ${mainDir}.`,
-                        );
-                        return Promise.resolve();
-                    }
-                },
+                ([mainDir, fileDir]) =>
+                    this.processItem(mainDir, fileDir, handler),
             );
 
             this.queue.clear();
@@ -82,13 +102,13 @@ export class PushQueue {
         }
     }
 
-    private async processPage(pageDir: string, fileDir: string) {
+    private async processItem(mainDir: string, fileDir: string, handler: PushHandler) {
         try {
             const fileMtime = getFileStats(fileDir)?.mtime.getTime() || 0;
-            const storedMtime = readFile(`${pageDir}/.last_modified`);
+            const storedMtime = readFile(`${mainDir}/.last_modified`);
             if (!storedMtime) {
                 logger.info(
-                    `No .last_modified file found for ${pageDir}. Skipping update.`,
+                    `No .last_modified file found for ${mainDir}. Skipping update.`,
                 );
                 return;
             }
@@ -97,95 +117,28 @@ export class PushQueue {
 
             if (fileMtime <= serverMtime) {
                 logger.info(
-                    `No local changes detected for ${pageDir} since last sync. Skipping update to server.`,
+                    `No local changes detected for ${mainDir} since last sync. Skipping update to server.`,
                 );
                 return;
             }
 
-            const { pageData, headHtml, bodyHtml, dataScript, blocks } =
-                await buildPage(pageDir);
-            const pageName: string = pageData.name as string;
+            const builtData = await handler.builder(mainDir);
+            const name: string = handler.getNameKey(builtData) as string;
 
-            if (!pageName) {
-                logger.error(`No page name found in page.json of ${pageDir}`);
+            if (!name) {
+                logger.error(`No name found in ${handler.nameFieldPath} of ${mainDir}`);
                 return;
             }
 
-            const updateMap: Record<string, unknown> = {};
-            if (headHtml !== null) {
-                updateMap.head_html = headHtml;
-            }
-            if (bodyHtml !== null) {
-                updateMap.body_html = bodyHtml;
-            }
-            if (dataScript !== null) {
-                updateMap.page_data_script = dataScript;
-            }
-            if (blocks.length > 0) {
-                updateMap.draft_blocks = JSON.stringify(blocks);
-            }
-            updateMap.custom_last_sync_client = global.socketId;
-
-            await this.client.updatePage(pageName, updateMap, storedMtime);
-            logger.info(`Updated page: ${pageName}`);
+            const updateMap = handler.buildUpdateMap(builtData);
+            await handler.update(name, updateMap, storedMtime);
+            logger.info(`Updated ${this.type}: ${name}`);
         } catch (err) {
             logger.error(
-                `Failed to process page ${pageDir}: ${(err as Error).message}`,
+                `Failed to process ${this.type} ${mainDir}: ${(err as Error).message}`,
             );
         }
     }
 
-    private async processComponent(componentDir: string, fileDir: string) {
-        try {
-            const fileMtime = getFileStats(fileDir)?.mtime.getTime() || 0;
-            const storedMtime = readFile(`${componentDir}/.last_modified`);
-            if (!storedMtime) {
-                logger.info(
-                    `No .last_modified file found for ${componentDir}. Skipping update.`,
-                );
-                return;
-            }
-
-            const serverMtime = new Date(storedMtime.trim()).getTime();
-
-            if (fileMtime <= serverMtime) {
-                logger.info(
-                    `No local changes detected for ${componentDir} since last sync. Skipping update to server.`,
-                );
-                return;
-            }
-
-            const { componentData, block } = await buildComponent(componentDir);
-            const componentName: string = componentData.name as string;
-
-            if (!componentName) {
-                logger.error(
-                    `No component name found in component.json of ${componentDir}`,
-                );
-                return;
-            }
-
-            const updateMap: Record<string, unknown> = {};
-            updateMap.block = JSON.stringify(block);
-
-            await this.client.updateComponent(
-                componentName,
-                updateMap,
-                storedMtime,
-            );
-            logger.info(`Updated component: ${componentName}`);
-        } catch (err) {
-            logger.error(
-                `Failed to process component ${componentDir}: ${(err as Error).message}`,
-            );
-        }
-    }
-
-    async flush() {
-        if (this.debounceTimer) {
-            clearTimeout(this.debounceTimer);
-            this.debounceTimer = null;
-        }
-        await this.process();
-    }
 }
+

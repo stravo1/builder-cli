@@ -2,24 +2,33 @@ import { logger } from "../utils/logger";
 import FrappeClient from "../utils/frappeClient";
 import writePage from "../services/writePage";
 import writeComponent from "../services/writeComponent";
+import { BaseQueue } from "./BaseQueue";
 
-export class PullQueue {
-    private queue: Map<string, any> = new Map(); // [type]Name -> info
-    private processing = false;
-    type: "Page" | "Component" | "Global";
+type PullHandler = {
+    writer: (client: FrappeClient, document: any) => Promise<any>;
+    typeLabel: string;
+};
+
+export class PullQueue extends BaseQueue {
     private writing: Set<string> = new Set(); // [type]Name -> currently writing
-    private debounceTimer: NodeJS.Timeout | null = null;
-    private readonly debounceDelay: number;
-    private readonly client: FrappeClient;
+
+    private handlers: Record<string, PullHandler> = {
+        Page: {
+            writer: writePage,
+            typeLabel: "page",
+        },
+        Component: {
+            writer: writeComponent,
+            typeLabel: "component",
+        },
+    };
 
     constructor(
         client: FrappeClient,
         type: "Page" | "Component" | "Global",
         debounceDelay: number = 1000,
     ) {
-        this.client = client;
-        this.type = type;
-        this.debounceDelay = debounceDelay;
+        super(client, type, debounceDelay);
     }
 
     add(document: any) {
@@ -38,19 +47,7 @@ export class PullQueue {
         this.scheduleProcessing();
     }
 
-    private scheduleProcessing() {
-        // Clear existing debounce timer
-        if (this.debounceTimer) {
-            clearTimeout(this.debounceTimer);
-        }
-
-        // Set new debounce timer
-        this.debounceTimer = setTimeout(() => {
-            this.process();
-        }, this.debounceDelay);
-    }
-
-    private async process() {
+    protected async process() {
         if (this.processing || this.queue.size === 0) {
             return;
         }
@@ -58,24 +55,23 @@ export class PullQueue {
         this.processing = true;
 
         try {
-            const pages = Array.from(this.queue.values());
+            const documents = Array.from(this.queue.values());
             this.queue.clear();
 
             logger.info(
-                `Processing ${pages.length} remote update${pages.length > 1 ? "s" : ""}...`,
+                `Processing ${documents.length} remote update${documents.length > 1 ? "s" : ""}...`,
             );
 
+            const handler = this.handlers[this.type];
+            if (!handler) {
+                logger.warn(`Unknown type: ${this.type}`);
+                return;
+            }
+
             // Process all items in parallel
-            const promises = pages.map((page) => {
-                if (this.type === "Page") {
-                    return this.processPage(page);
-                } else if (this.type === "Component") {
-                    return this.processComponent(page);
-                } else {
-                    logger.warn(`Unknown type: ${this.type}`);
-                    return Promise.resolve();
-                }
-            });
+            const promises = documents.map((doc) =>
+                this.processItem(doc, handler),
+            );
 
             await Promise.all(promises);
         } finally {
@@ -88,71 +84,36 @@ export class PullQueue {
         }
     }
 
-    private async processPage(page: any) {
-        const pageName = page.name;
+    private async processItem(document: any, handler: PullHandler) {
+        const name = document.name;
 
         try {
             // Mark as writing
-            this.writing.add(pageName);
+            this.writing.add(name);
 
-            await writePage(this.client, page);
-            logger.info(`Pulled page: ${pageName}`);
+            await handler.writer(this.client, document);
+            logger.info(`Pulled ${handler.typeLabel}: ${name}`);
         } catch (err) {
             logger.error(
-                `Failed to pull page ${pageName}: ${(err as Error).message}`,
+                `Failed to pull ${handler.typeLabel} ${name}: ${(err as Error).message}`,
             );
         } finally {
             // Mark as done writing
-            this.writing.delete(pageName);
+            this.writing.delete(name);
 
-            // If page was updated while writing, reprocess immediately with latest version
-            if (this.queue.has(pageName)) {
+            // If document was updated while writing, reprocess immediately with latest version
+            if (this.queue.has(name)) {
                 logger.info(
-                    `[REQUEUE] Page ${pageName} has newer updates, reprocessing...`,
+                    `[REQUEUE] ${this.type} ${name} has newer updates, reprocessing...`,
                 );
-                const latestPage = this.queue.get(pageName)!;
-                this.queue.delete(pageName);
+                const latestDocument = this.queue.get(name)!;
+                this.queue.delete(name);
                 // Process immediately without debounce
-                await this.processPage(latestPage);
+                await this.processItem(latestDocument, handler);
             }
         }
     }
 
-    private async processComponent(component: any) {
-        const componentName = component.name;
-
-        try {
-            // Mark as writing
-            this.writing.add(componentName);
-
-            await writeComponent(this.client, component);
-            logger.info(`Pulled component: ${componentName}`);
-        } catch (err) {
-            logger.error(
-                `Failed to pull component ${componentName}: ${(err as Error).message}`,
-            );
-        } finally {
-            // Mark as done writing
-            this.writing.delete(componentName);
-
-            // If component was updated while writing, reprocess immediately with latest version
-            if (this.queue.has(componentName)) {
-                logger.info(
-                    `[REQUEUE] Component ${componentName} has newer updates, reprocessing...`,
-                );
-                const latestComponent = this.queue.get(componentName)!;
-                this.queue.delete(componentName);
-                // Process immediately without debounce
-                await this.processComponent(latestComponent);
-            }
-        }
-    }
-
-    async flush() {
-        if (this.debounceTimer) {
-            clearTimeout(this.debounceTimer);
-            this.debounceTimer = null;
-        }
-        await this.process();
-    }
 }
+
+
