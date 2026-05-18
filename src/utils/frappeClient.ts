@@ -3,12 +3,10 @@ import { logger } from "./logger";
 class FrappeClient {
     siteUrl: string;
     authToken: string;
-    hasCliSaveEndpoint: boolean = false;
 
     constructor(siteUrl: string, authToken: string) {
         this.siteUrl = siteUrl;
         this.authToken = authToken;
-        this.testIfCliSaveEndpointExists();
     }
 
     async testConnection(): Promise<boolean> {
@@ -31,32 +29,6 @@ class FrappeClient {
         } catch (error) {
             logger.error("Error occurred while testing connection:", error);
             return false;
-        }
-    }
-
-    async testIfCliSaveEndpointExists(): Promise<void> {
-        try {
-            const response = await fetch(
-                `${this.siteUrl}/api/method/builder.api.test_save_from_cli`,
-                {
-                    method: "GET",
-                    headers: {
-                        "Content-Type": "application/json",
-                        Authorization: `token ${this.authToken}`,
-                    },
-                },
-            );
-            this.hasCliSaveEndpoint = response.ok;
-            if (!response.ok) {
-                logger.warn(
-                    `CLI save endpoint test returned status ${response.status}. CLI save functionality will be disabled.`,
-                );
-            }
-        } catch (error) {
-            logger.warn(
-                `Error occurred while testing CLI save endpoint: ${error}. CLI save functionality will be disabled.`,
-            );
-            this.hasCliSaveEndpoint = false;
         }
     }
 
@@ -122,25 +94,14 @@ class FrappeClient {
         lastModified?: string,
     ): Promise<any> {
         try {
-            let url = `${this.siteUrl}/api/resource/Builder Page/${pageName}`;
-            let body = {};
-            let method = "PUT";
+            const url = `${this.siteUrl}/api/resource/Builder Page/${pageName}`;
+            const method = "PUT";
+            const body = {
+                ...updateMap,
+                source: "cli",
+                last_known_server_mtime: lastModified,
+            };
 
-            if (this.hasCliSaveEndpoint) {
-                url = `${this.siteUrl}/api/method/builder.api.save_from_cli`;
-                method = "POST";
-                body = {
-                    doctype: "Builder Page",
-                    name: pageName,
-                    update_map: updateMap,
-                    last_known_server_mtime: lastModified,
-                };
-            } else {
-                logger.warn(
-                    "CLI save endpoint not available. Falling back to standard resource update. This may cause conflicts if the page was modified on the server since last fetch.",
-                );
-                body = updateMap;
-            }
             const response = await fetch(encodeURI(url), {
                 method,
                 headers: {
@@ -228,25 +189,14 @@ class FrappeClient {
         lastModified?: string,
     ): Promise<any> {
         try {
-            let url = `${this.siteUrl}/api/resource/Builder Component/${componentName}`;
-            let body = {};
-            let method = "PUT";
+            const url = `${this.siteUrl}/api/resource/Builder Component/${componentName}`;
+            const method = "PUT";
+            const body = {
+                ...updateMap,
+                source: "cli",
+                last_known_server_mtime: lastModified,
+            };
 
-            if (this.hasCliSaveEndpoint) {
-                url = `${this.siteUrl}/api/method/builder.api.save_from_cli`;
-                method = "POST";
-                body = {
-                    doctype: "Builder Component",
-                    name: componentName,
-                    update_map: updateMap,
-                    last_known_server_mtime: lastModified,
-                };
-            } else {
-                logger.warn(
-                    "CLI save endpoint not available. Falling back to standard resource update. This may cause conflicts if the component was modified on the server since last fetch.",
-                );
-                body = updateMap;
-            }
             const response = await fetch(encodeURI(url), {
                 method,
                 headers: {
@@ -255,12 +205,12 @@ class FrappeClient {
                 },
                 body: JSON.stringify(body),
             });
+            
             if (!response.ok) {
                 logger.debug(JSON.stringify(response));
                 logger.error(
-                    `${response.status} ${
-                        response.statusText ||
-                        "Unknown error occurred while updating component"
+                    `${response.status} ${response.statusText ||
+                    "Unknown error occurred while updating component"
                     }`,
                 );
                 return null;
