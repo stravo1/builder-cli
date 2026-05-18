@@ -59,10 +59,22 @@ builder watch
 ```
 
 This command:
-- Watches for changes in the `pages/` directory
+- Watches for changes in the `pages/` or `/components` directory
 - Automatically syncs local changes to the server
 - Listens for remote server updates via Socket.IO
 - Maintains synchronization timestamps to avoid conflicts
+
+```bash
+builder watch --only-remote
+```
+
+Will only watch for server updates and NOT local updates.
+
+```bash
+builder watch --only-local
+```
+
+Will only watch for local updates and NOT server updates.
 
 ### `pull` - Fetch Latest Data from Server
 
